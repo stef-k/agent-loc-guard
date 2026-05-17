@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Compile checker
+        run: python3 -m py_compile skills/loc-guard/scripts/loc_guard.py
+
+      - name: Run tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Validate JSON examples
+        run: |
+          python3 -m json.tool examples/loc-guard.config.json >/dev/null
+          python3 -m json.tool hooks/codex/hooks.example.json >/dev/null
+          python3 -m json.tool hooks/claude/settings.example.json >/dev/null
+
+      - name: Run LOC Guard
+        run: python3 skills/loc-guard/scripts/loc_guard.py . --config examples/loc-guard.config.json

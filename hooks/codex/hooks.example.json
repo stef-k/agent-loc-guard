@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --changed-only",
+            "timeout": 30,
+            "statusMessage": "Checking LOC Guard policy"
+          }
+        ]
+      }
+    ]
+  }
+}

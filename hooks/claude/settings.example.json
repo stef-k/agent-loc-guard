@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agent-tools/loc_guard.py\" \"$CLAUDE_PROJECT_DIR\" --config \"$CLAUDE_PROJECT_DIR/.agent-tools/loc-guard.config.json\" --changed-only",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
