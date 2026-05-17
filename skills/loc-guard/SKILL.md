@@ -1,6 +1,7 @@
 ---
 name: loc-guard
 description: Use when creating, editing, reviewing, or refactoring source files to enforce a deterministic file-length policy across agent-assisted coding workflows. Run the bundled LOC checker, warn at 400 counted LOC, and hard fail at 600 counted LOC unless explicitly exempted.
+license: Complete terms in LICENSE.txt
 ---
 
 # LOC Guard
