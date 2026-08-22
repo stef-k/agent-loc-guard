@@ -358,7 +358,7 @@ class LocGuardTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 3)
             payload = self.read_json(result)
-            self.assertEqual(payload["error"], "use either --changed-only or --staged, not both")
+            self.assertIn("file-selection mode", payload["error"])
 
     def test_base_ref_includes_added_and_modified_committed_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
