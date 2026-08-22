@@ -171,14 +171,7 @@ def load_config(args: argparse.Namespace) -> Config:
     exclude = list(data.get("exclude", DEFAULT_EXCLUDES))
     exclude.extend(args.exclude)
 
-    allowed = [
-        AllowedLargeFile(
-            path=str(item.get("path", "")).replace("\\", "/"),
-            reason=str(item.get("reason", "")),
-        )
-        for item in data.get("allowedLargeFiles", [])
-    ]
-    allowed = [item for item in allowed if item.path]
+    allowed = parse_allowed_large_files(data.get("allowedLargeFiles", []))
 
     count_blank_lines = bool(data.get("countBlankLines", False)) or bool(args.count_blank_lines)
     count_comment_lines = bool(data.get("countCommentLines", True))
@@ -194,6 +187,29 @@ def load_config(args: argparse.Namespace) -> Config:
         exclude=exclude,
         allowed_large_files=allowed,
     )
+
+
+def parse_allowed_large_files(value: Any) -> list[AllowedLargeFile]:
+    if not isinstance(value, list):
+        raise ValueError("allowedLargeFiles must be an array")
+
+    allowed: list[AllowedLargeFile] = []
+    for index, item in enumerate(value):
+        location = f"allowedLargeFiles[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{location} must be an object")
+
+        path = item.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError(f"{location}.path must be a non-empty string")
+
+        reason = item.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(f"{location}.reason must be a non-empty string")
+
+        allowed.append(AllowedLargeFile(path=path.replace("\\", "/"), reason=reason))
+
+    return allowed
 
 
 def normalise_extension(value: str) -> str:

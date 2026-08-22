@@ -29,6 +29,8 @@ The canonical pieces are:
 - `600` counted LOC is a hard cap unless the user explicitly approves an exception.
 - A warning requires the agent to inspect cohesion, responsibility boundaries, and likely near-term growth.
 - A split should happen only when it improves boundaries or reduces meaningful complexity.
+- Large-file exemptions require a path and reason and are explicit policy decisions; agents may not create or alter them without explicit user approval.
+- LOC must not be gamed through dense formatting or readability loss. Project style and sound design take precedence over optimizing the metric.
 
 Required warning report:
 
@@ -248,6 +250,10 @@ By default, counted LOC means non-blank physical lines.
 Comments are counted by default because large comment-heavy files can still become hard to review. You may set `countCommentLines` to `false` in the config for a lighter check.
 
 Generated, vendored, designer, minified, migration, lock, snapshot, and machine-produced files should normally be excluded by configuration.
+
+Each `allowedLargeFiles` entry must be an object with a non-empty string `path` and `reason`. Valid oversized exemptions remain visible as `exempt` with the configured reason. Malformed entries are configuration errors (exit `3`), including under `--ci` and in machine-readable `--json` mode.
+
+Exemptions represent explicit user-approved policy, not an escape hatch for an agent responding to a warning or failure. Likewise, agents must not compress readable source onto fewer physical lines to evade a threshold; legitimate LOC reduction comes from clearer code or better responsibility boundaries.
 
 ## Agent skill
 

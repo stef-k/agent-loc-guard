@@ -4,7 +4,7 @@ This document defines how agents should interpret LOC Guard results.
 
 ## Core rule
 
-600 counted LOC is a hard cap unless the user explicitly approves an exception.
+More than 600 counted LOC is a prohibited default state for normal handwritten source unless an explicit approved exemption applies. This is a guardrail, not proof that every exceptional file has bad architecture.
 
 400 counted LOC is a review trigger, not an automatic refactor command.
 
@@ -57,6 +57,18 @@ These files are usually excluded by config:
 - snapshots;
 - lock files;
 - machine-produced files.
+
+`allowedLargeFiles` entries are explicit policy decisions. Existing approved entries may be honored and reported with their configured reasons. Do not add, broaden, modify, or repurpose an entry, or invent a reason, to bypass a warning or hard failure without explicit user approval.
+
+Do not infer approval from a hard failure, inconvenient refactoring, a nearby or broad exemption, historical file size, time pressure, or the user's request to complete the coding task. An unapproved file over the hard cap must be resolved or explicitly approved by the user.
+
+## Do not game counted LOC
+
+LOC thresholds must never be satisfied by reducing readability or departing from normal project formatting merely to lower counted physical lines. Follow the project's established formatter and source-style conventions.
+
+Do not combine otherwise independent statements or declarations onto one line, collapse branches or control flow merely to save lines, compress expressions or logical operations into unusually dense forms, manually minify handwritten source, remove useful comments or structural whitespace solely to reduce LOC, or fight the project's formatter/style to lower the count.
+
+Legitimate reductions come from clearer design or code: remove redundancy or dead code, simplify control flow, consolidate duplication when that improves the design, split cohesive responsibilities, or use a clearer idiom. A file is not legitimately below a threshold when deliberate readability-degrading physical-line compression produced the reduction. This is an agent behavioral rule; the deterministic checker does not attempt dense-code detection.
 
 ## Test files
 

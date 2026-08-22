@@ -13,7 +13,7 @@ The purpose of this skill is not to force tiny files. The purpose is to prevent 
 ## Thresholds
 
 - 400 counted LOC is a review trigger, not an automatic refactor command.
-- 600 counted LOC is a hard cap unless the user explicitly approves an exception.
+- More than 600 counted LOC is a prohibited default state for normal handwritten source unless an explicit approved exemption applies.
 
 ## Interpretation
 
@@ -65,7 +65,7 @@ or:
 split performed because: ...
 ```
 
-If a file exceeds 600 counted LOC, do not continue as if the task is complete. Either:
+If a file exceeds 600 counted LOC without an approved exemption, do not continue as if the task is complete. Either:
 
 1. split/refactor the file below the hard cap, or
 2. ask the user for explicit approval for an exception.
@@ -94,11 +94,43 @@ Do not accept a warning merely because:
 
 ## Hard cap rule
 
-A file over 600 counted LOC is a failed state for normal handwritten source files.
+A file over 600 counted LOC is a prohibited default state for normal handwritten source files unless an explicit approved exemption applies. This limit is a guardrail; it does not prove that every exceptional file has bad architecture.
 
-The user must explicitly approve any exception. Do not infer approval.
+Existing approved `allowedLargeFiles` entries may be honored and reported with their configured reasons. Do not add, broaden, modify, or repurpose an exemption, or invent its reason, to bypass a warning or hard failure without explicit user approval.
+
+Do not infer approval from a hard failure, inconvenient refactoring, a nearby or broad exemption, historical file size, time pressure, or a request to complete the coding task. An unapproved file over the hard cap must be resolved or explicitly approved by the user.
 
 Generated, vendored, minified, designer, lock, snapshot, migration, and machine-produced files may be excluded by configuration.
+
+## Do not game counted LOC
+
+LOC thresholds must never be satisfied by reducing readability or departing from the project's normal source style merely to lower counted physical lines. Follow the project's established formatter and formatting conventions, such as `dotnet format`, `ktfmt`, `gofmt`, `black`, `ruff format`, or `prettier`, when applicable.
+
+Do not:
+
+- place otherwise independent statements or declarations on one physical line;
+- collapse branches or control flow merely to save lines;
+- compress expressions or logical operations into unusually dense forms;
+- manually minify or quasi-minify handwritten source;
+- remove useful comments or structural whitespace solely to reduce LOC;
+- adopt formatting inconsistent with the project's formatter or style to lower the count.
+
+For example, do not change this readable code:
+
+```csharp
+var user = GetUser();
+var trip = GetTrip();
+Validate(user, trip);
+Save(user, trip);
+```
+
+into this solely to evade LOC Guard:
+
+```csharp
+var user = GetUser(); var trip = GetTrip(); Validate(user, trip); Save(user, trip);
+```
+
+Legitimate LOC reduction comes from design or code improvement: remove redundant or dead code, simplify control flow, consolidate duplication when that improves the design, split cohesive responsibilities, or use a clearer idiom. A file is not legitimately below a threshold when deliberate readability-degrading physical-line compression produced the reduction. The checker does not detect this automatically; it is an agent behavioral requirement.
 
 ## Checker
 

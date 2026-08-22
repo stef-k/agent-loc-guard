@@ -16,6 +16,10 @@ LOC Guard protects current work without making unrelated pre-existing technical 
 
 600 counted LOC is a hard cap unless the user explicitly approves an exception.
 
+Honor existing approved `allowedLargeFiles` entries, but do not add, broaden, modify, repurpose, or invent reasons for exemptions without explicit user approval.
+
+Do not game counted LOC through dense formatting, combined independent statements/declarations, minification, or removal of useful comments or structure. Follow the project's formatter and normal style; readability and design outrank metric optimization.
+
 When a changed or new file warns:
 
 1. Inspect whether the file is still cohesive and single-responsibility.
