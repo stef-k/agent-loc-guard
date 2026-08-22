@@ -18,6 +18,8 @@ LOC Guard protects current work without making unrelated pre-existing technical 
 
 Honor existing approved `allowedLargeFiles` entries, but do not add, broaden, modify, repurpose, or invent reasons for exemptions without explicit user approval.
 
+Do not create, broaden, or relax threshold overrides merely to bypass a warning or failure without explicit user approval or existing project policy.
+
 Do not game counted LOC through dense formatting, combined independent statements/declarations, minification, or removal of useful comments or structure. Follow the project's formatter and normal style; readability and design outrank metric optimization.
 
 When a changed or new file warns:

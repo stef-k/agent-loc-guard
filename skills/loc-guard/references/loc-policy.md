@@ -60,6 +60,8 @@ These files are usually excluded by config:
 
 `allowedLargeFiles` entries are explicit policy decisions. Existing approved entries may be honored and reported with their configured reasons. Do not add, broaden, modify, or repurpose an entry, or invent a reason, to bypass a warning or hard failure without explicit user approval.
 
+Threshold overrides are also explicit policy decisions. Do not create, broaden, or relax an override merely to bypass a warning or failure without explicit user approval or existing project policy.
+
 Do not infer approval from a hard failure, inconvenient refactoring, a nearby or broad exemption, historical file size, time pressure, or the user's request to complete the coding task. An unapproved file over the hard cap must be resolved or explicitly approved by the user.
 
 ## Do not game counted LOC
