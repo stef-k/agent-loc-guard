@@ -1,0 +1,21 @@
+name: LOC Guard Full Audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  loc-guard-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run full repository LOC audit
+        run: |
+          python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --ci

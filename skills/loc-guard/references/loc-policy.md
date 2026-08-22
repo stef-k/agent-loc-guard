@@ -8,6 +8,8 @@ This document defines how agents should interpret LOC Guard results.
 
 400 counted LOC is a review trigger, not an automatic refactor command.
 
+Normal development evaluates staged, unstaged, and untracked current work relative to `HEAD`. Unchanged legacy files are outside the task, but any legacy file modified by the task is evaluated in its resulting form. A scan without a change-selection flag is an explicit full-repository audit for baseline analysis or cleanup.
+
 ## Warning interpretation
 
 When a changed or new file warns, inspect whether the file is still cohesive and single-responsibility.

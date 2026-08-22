@@ -116,8 +116,10 @@ def main() -> int:
     parser.add_argument("--warn", type=int, help="Override warning threshold.")
     parser.add_argument("--fail", type=int, help="Override failure threshold.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    parser.add_argument("--ci", action="store_true", help="Do not fail solely on soft warnings.")
     parser.add_argument("--changed-only", action="store_true", help="Only inspect git changed files.")
     parser.add_argument("--staged", action="store_true", help="Only inspect git staged files.")
+    parser.add_argument("--base-ref", help="Only inspect committed changes from this Git ref to HEAD.")
     parser.add_argument("--include", action="append", default=[], help="Extra extension to include, such as .md.")
     parser.add_argument("--exclude", action="append", default=[], help="Extra glob pattern to exclude.")
     parser.add_argument("--count-blank-lines", action="store_true", help="Count blank lines.")
@@ -134,7 +136,7 @@ def main() -> int:
             print_json(results, config)
         else:
             print_text(results, config)
-        return exit_code(results)
+        return exit_code(results, ci=args.ci)
     except Exception as exc:
         if args.json:
             print(json.dumps({"error": str(exc)}, indent=2))
@@ -216,10 +218,16 @@ def find_repo_root(start: Path) -> Path:
 
 
 def collect_files(args: argparse.Namespace, config: Config, root: Path) -> list[Path]:
-    if args.changed_only and args.staged:
-        raise ValueError("use either --changed-only or --staged, not both")
+    has_base_ref = args.base_ref is not None
+    selection_modes = sum((args.changed_only, args.staged, has_base_ref))
+    if selection_modes > 1:
+        raise ValueError("use only one file-selection mode: --changed-only, --staged, or --base-ref")
+    if has_base_ref and not args.base_ref.strip():
+        raise ValueError("--base-ref must not be empty")
 
-    if args.changed_only or args.staged:
+    if has_base_ref:
+        files = git_base_files(root, args.base_ref)
+    elif args.changed_only or args.staged:
         files = git_files(root, staged=args.staged)
     else:
         files = expand_paths([Path(p) for p in args.paths])
@@ -258,6 +266,26 @@ def git_files(root: Path, staged: bool) -> list[Path]:
         files.extend(root / os.fsdecode(path) for path in untracked.stdout.split(b"\0") if path)
 
     return files
+
+
+def git_base_files(root: Path, base_ref: str) -> list[Path]:
+    command = [
+        "git",
+        "diff",
+        "--name-only",
+        "--diff-filter=ACMR",
+        "-z",
+        f"{base_ref}...HEAD",
+        "--",
+    ]
+    try:
+        result = subprocess.run(command, cwd=root, check=True, capture_output=True)
+    except subprocess.CalledProcessError as exc:
+        detail = os.fsdecode(exc.stderr).strip()
+        message = f"unable to compare base ref {base_ref!r} with HEAD"
+        raise RuntimeError(f"{message}: {detail}" if detail else message) from exc
+
+    return [root / os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
 
 
 def expand_paths(paths: list[Path]) -> list[Path]:
@@ -425,10 +453,10 @@ def summary(results: list[FileResult]) -> dict[str, int]:
     }
 
 
-def exit_code(results: list[FileResult]) -> int:
+def exit_code(results: list[FileResult], ci: bool = False) -> int:
     if any(result.status == "fail" for result in results):
         return 2
-    if any(result.status == "warn" for result in results):
+    if not ci and any(result.status == "warn" for result in results):
         return 1
     return 0
 

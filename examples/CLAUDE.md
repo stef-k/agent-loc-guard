@@ -7,8 +7,10 @@ Use the LOC Guard skill when creating or modifying source files.
 Run:
 
 ```bash
-python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json
+python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --changed-only
 ```
+
+LOC Guard protects current work without making unrelated pre-existing technical debt part of the task. Files modified by the task are still evaluated in their resulting form; run without `--changed-only` only for an explicit full-repository audit.
 
 400 counted LOC is a review trigger, not an automatic refactor command.
 

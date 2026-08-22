@@ -169,10 +169,10 @@ Suggested installation modes:
 - **Personal agent skill**: install `skills/loc-guard/` into the agent's personal skills directory and copy `loc_guard.py` into each checked project.
 - **CI visibility**: copy `ci/github/loc-guard.yml` into `.github/workflows/loc-guard.yml` so users see policy failures in pull requests.
 
-Verify an install with:
+Verify an install against current work with:
 
 ```bash
-python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json
+python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --changed-only
 ```
 
 Publishing checklist:
@@ -186,29 +186,35 @@ Publishing checklist:
 
 ## Usage
 
-Run from the root of a repository:
+Run from the root of a repository. Normal agent work checks staged, unstaged, and untracked files relative to `HEAD`:
 
 ```bash
-python3 .agent-tools/loc_guard.py .
+python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --changed-only
 ```
 
-Use an explicit config:
+This protects current work without making unrelated pre-existing technical debt part of the task. A legacy file modified by the task is still checked in its current resulting form.
+
+Check staged/index files only, such as in a pre-commit hook:
 
 ```bash
-python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json
+python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --staged
 ```
 
-Check only changed files:
+Check committed pull-request changes from the merge base with an explicit base ref:
 
 ```bash
-python3 .agent-tools/loc_guard.py . --changed-only
+python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --base-ref <base-ref> --ci
 ```
 
-Check staged files before commit:
+`--base-ref` uses Git's three-dot comparison (`<base-ref>...HEAD`), so base-only changes are excluded. `--changed-only`, `--staged`, and `--base-ref` are mutually exclusive.
+
+Run an explicit full-repository audit by omitting all change-selection flags:
 
 ```bash
-python3 .agent-tools/loc_guard.py . --staged
+python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --ci
 ```
+
+The audit example uses `--ci`: warnings remain visible, while only hard failures and tool errors make automation fail. Omit `--ci` locally when warnings should return a nonzero status.
 
 Emit JSON:
 
@@ -224,6 +230,8 @@ python3 .agent-tools/loc_guard.py . --warn 400 --fail 600
 
 ## Exit codes
 
+Normal CLI:
+
 ```text
 0 = OK
 1 = one or more warning-threshold files found
@@ -231,7 +239,7 @@ python3 .agent-tools/loc_guard.py . --warn 400 --fail 600
 3 = tool/configuration/runtime error
 ```
 
-Hard failures take precedence over warnings.
+With `--ci`, exit `0` means OK or warning; exits `2` and `3` retain their meanings. Warning files remain `warn` in text and JSON reports. Hard failures take precedence over warnings in both modes.
 
 ## Counted LOC
 
@@ -271,7 +279,7 @@ These are examples because exact hook configuration can vary by local setup and 
 
 ## GitHub Actions
 
-A workflow example is provided at:
+The pull-request workflow example is provided at:
 
 ```text
 ci/github/loc-guard.yml
@@ -283,13 +291,23 @@ Copy it to:
 .github/workflows/loc-guard.yml
 ```
 
+It runs only for `pull_request`, checks out the PR head with full history, and compares it with `github.event.pull_request.base.sha`. This avoids relying on the checkout's immediate working-tree state and handles branches that are ahead of, behind, or diverged from the base.
+
+A separate manual full-repository audit is provided at:
+
+```text
+ci/github/loc-guard-audit.yml
+```
+
+Neither reusable example assigns PR semantics to pushes. Projects that want push auditing can run the full scan explicitly. This repository's own CI does that on pushes to `main`/`master`, while pull requests use `--base-ref`.
+
 This repository also includes active CI at:
 
 ```text
 .github/workflows/ci.yml
 ```
 
-It compiles the checker, runs the test suite, validates JSON examples, and runs LOC Guard against the repository.
+It compiles the checker, runs the test suite, validates JSON examples, checks PR changes on pull requests, and performs an explicit full audit on pushes.
 
 ## Tests
 
@@ -311,8 +329,10 @@ Use the LOC Guard skill when creating or modifying source files.
 Run:
 
 ```bash
-python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json
+python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --changed-only
 ```
+
+This checks current work so unrelated unchanged legacy files do not become part of the task. Run without `--changed-only` only for an explicit full-repository audit.
 
 400 counted LOC is a review trigger, not an automatic refactor command.
 

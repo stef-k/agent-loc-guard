@@ -34,20 +34,22 @@ Run the LOC checker after source edits.
 Preferred project-local command:
 
 ```bash
-python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json
+python3 .agent-tools/loc_guard.py . --config .agent-tools/loc-guard.config.json --changed-only
 ```
 
 If the project has not copied the checker into `.agent-tools/`, run the bundled checker from this skill instead:
 
 ```bash
-python3 skills/loc-guard/scripts/loc_guard.py .
+python3 skills/loc-guard/scripts/loc_guard.py . --changed-only
 ```
 
 In Claude Code, when the skill is installed under `~/.claude/skills/` or `.claude/skills/`, use Claude's skill-directory variable for the bundled checker:
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/loc_guard.py" .
+python3 "${CLAUDE_SKILL_DIR}/scripts/loc_guard.py" . --changed-only
 ```
+
+Changed-file checking protects current work without making unrelated pre-existing technical debt part of the task. A legacy file that the task modifies is current work and is still evaluated. Run without a change-selection flag only for an explicit full-repository audit.
 
 If no warning or failure occurs, no special report is needed.
 
