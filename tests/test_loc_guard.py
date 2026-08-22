@@ -35,6 +35,18 @@ def init_git_repo(root: Path, tracked_files: dict[str, int] | None = None) -> No
     )
 
 
+def commit_all(root: Path, message: str) -> str:
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "commit", "-m", message], cwd=root, check=True, capture_output=True, text=True)
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
 class LocGuardTests(unittest.TestCase):
     def run_guard(self, cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -62,6 +74,51 @@ class LocGuardTests(unittest.TestCase):
             payload = self.read_json(result)
             self.assertEqual(payload["summary"]["warn"], 1)
             self.assertEqual(payload["files"][0]["status"], "warn")
+
+    def test_ci_warning_returns_exit_0_and_preserves_json_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_lines(root / "warn.py", 4)
+
+            result = self.run_guard(root, ".", "--warn", "3", "--fail", "6", "--ci", "--json")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = self.read_json(result)
+            self.assertEqual(payload["summary"]["warn"], 1)
+            self.assertEqual(payload["files"][0]["status"], "warn")
+
+    def test_ci_warning_remains_visible_in_text_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_lines(root / "warn.py", 4)
+
+            result = self.run_guard(root, ".", "--warn", "3", "--fail", "6", "--ci")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("WARN:", result.stdout)
+            self.assertIn("warn.py", result.stdout)
+
+    def test_ci_hard_failure_returns_exit_2_and_takes_precedence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_lines(root / "warn.py", 4)
+            write_lines(root / "fail.py", 7)
+
+            result = self.run_guard(root, ".", "--warn", "3", "--fail", "6", "--ci", "--json")
+
+            self.assertEqual(result.returncode, 2, result.stderr)
+            payload = self.read_json(result)
+            self.assertEqual(payload["summary"]["warn"], 1)
+            self.assertEqual(payload["summary"]["fail"], 1)
+
+    def test_ci_configuration_failure_returns_exit_3(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            result = self.run_guard(root, ".", "--config", "missing.json", "--ci", "--json")
+
+            self.assertEqual(result.returncode, 3)
+            self.assertIn("config file not found", self.read_json(result)["error"])
 
     def test_fail_threshold_returns_exit_2(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -302,6 +359,103 @@ class LocGuardTests(unittest.TestCase):
             self.assertEqual(result.returncode, 3)
             payload = self.read_json(result)
             self.assertEqual(payload["error"], "use either --changed-only or --staged, not both")
+
+    def test_base_ref_includes_added_and_modified_committed_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            init_git_repo(root, {"modified.py": 1, "unchanged.py": 1})
+            base = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
+            ).stdout.strip()
+            write_lines(root / "modified.py", 2)
+            write_lines(root / "added.py", 1)
+            commit_all(root, "feature changes")
+
+            result = self.run_guard(root, ".", "--base-ref", base, "--json")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = self.read_json(result)
+            self.assertEqual([file["path"] for file in payload["files"]], ["added.py", "modified.py"])
+
+    def test_base_ref_ignores_deleted_and_unmodified_legacy_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            init_git_repo(root, {"deleted.py": 7, "legacy.py": 7, "small.py": 1})
+            base = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
+            ).stdout.strip()
+            (root / "deleted.py").unlink()
+            write_lines(root / "small.py", 2)
+            commit_all(root, "delete and modify")
+
+            result = self.run_guard(
+                root, ".", "--base-ref", base, "--warn", "3", "--fail", "6", "--ci", "--json"
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = self.read_json(result)
+            self.assertEqual([file["path"] for file in payload["files"]], ["small.py"])
+
+    def test_base_ref_ci_detects_changed_oversized_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            init_git_repo(root)
+            base = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
+            ).stdout.strip()
+            write_lines(root / "large.py", 7)
+            commit_all(root, "add oversized file")
+
+            result = self.run_guard(
+                root, ".", "--base-ref", base, "--warn", "3", "--fail", "6", "--ci", "--json"
+            )
+
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(self.read_json(result)["files"][0]["status"], "fail")
+
+    def test_base_ref_uses_merge_base_and_ignores_later_base_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            init_git_repo(root, {"shared.py": 1})
+            initial_branch = subprocess.run(
+                ["git", "branch", "--show-current"], cwd=root, check=True, capture_output=True, text=True
+            ).stdout.strip()
+            subprocess.run(["git", "switch", "-c", "feature"], cwd=root, check=True, capture_output=True)
+            write_lines(root / "feature.py", 1)
+            commit_all(root, "feature commit")
+            subprocess.run(["git", "switch", initial_branch], cwd=root, check=True, capture_output=True)
+            write_lines(root / "base-only.py", 7)
+            commit_all(root, "later base commit")
+            subprocess.run(["git", "switch", "feature"], cwd=root, check=True, capture_output=True)
+
+            result = self.run_guard(
+                root, ".", "--base-ref", initial_branch, "--warn", "3", "--fail", "6", "--ci", "--json"
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = self.read_json(result)
+            self.assertEqual([file["path"] for file in payload["files"]], ["feature.py"])
+
+    def test_invalid_base_ref_returns_tool_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            init_git_repo(root, {"legacy.py": 7})
+
+            result = self.run_guard(root, ".", "--base-ref", "missing-ref", "--ci", "--json")
+
+            self.assertEqual(result.returncode, 3)
+            self.assertIn("missing-ref", self.read_json(result)["error"])
+
+    def test_base_ref_conflicts_with_worktree_selection_modes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            init_git_repo(root)
+
+            for mode in ("--changed-only", "--staged"):
+                with self.subTest(mode=mode):
+                    result = self.run_guard(root, ".", mode, "--base-ref", "HEAD", "--json")
+                    self.assertEqual(result.returncode, 3)
+                    self.assertIn("file-selection mode", self.read_json(result)["error"])
 
 
 if __name__ == "__main__":
