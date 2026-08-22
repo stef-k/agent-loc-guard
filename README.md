@@ -1,5 +1,10 @@
 # Agent LOC Guard
 
+> [!IMPORTANT]
+> **Superseded by [Agent Code Guard](https://github.com/stef-k/agent-code-guard).** Agent LOC Guard was the prototype/reference implementation used to establish the LOC policy and deterministic checker behavior. Its stable behavior from commit `75ab39d261dbc65f78815836fac90add16d265d1` has been migrated into Agent Code Guard, which is now the canonical maintained implementation. New development happens there; use Agent Code Guard for maintained installations and future guard functionality.
+>
+> This repository remains available as historical/reference material. Its documentation, tests, issues, and implementation history are intentionally retained rather than replaced by a compatibility wrapper or dual-maintenance process.
+
 Agent LOC Guard is a small, portable file-length guard for agent-assisted development.
 
 It combines:
