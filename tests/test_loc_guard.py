@@ -237,6 +237,34 @@ class LocGuardTests(unittest.TestCase):
             payload = self.read_json(result)
             self.assertEqual([file["path"] for file in payload["files"]], ["new.py"])
 
+    def test_changed_only_omits_staged_and_unstaged_changes_that_cancel(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            init_git_repo(root, {"unchanged.py": 1})
+            write_lines(root / "unchanged.py", 2)
+            subprocess.run(["git", "add", "unchanged.py"], cwd=root, check=True)
+            write_lines(root / "unchanged.py", 1)
+
+            result = self.run_guard(root, ".", "--changed-only", "--json")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = self.read_json(result)
+            self.assertEqual(payload["summary"]["checked"], 0)
+
+    def test_changed_only_supports_staged_and_untracked_files_without_head(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True, text=True)
+            write_lines(root / "staged.py", 1)
+            subprocess.run(["git", "add", "staged.py"], cwd=root, check=True)
+            write_lines(root / "untracked.py", 1)
+
+            result = self.run_guard(root, ".", "--changed-only", "--json")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = self.read_json(result)
+            self.assertEqual([file["path"] for file in payload["files"]], ["staged.py", "untracked.py"])
+
     def test_changed_only_does_not_evaluate_deleted_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

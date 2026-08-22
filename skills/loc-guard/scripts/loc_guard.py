@@ -237,14 +237,16 @@ def collect_files(args: argparse.Namespace, config: Config, root: Path) -> list[
 
 
 def git_files(root: Path, staged: bool) -> list[Path]:
-    diff_commands = [["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"]]
-    if not staged:
-        diff_commands.append(["git", "diff", "--name-only", "--diff-filter=ACMR", "-z"])
-
-    files: list[Path] = []
-    for command in diff_commands:
-        result = subprocess.run(command, cwd=root, check=True, capture_output=True)
-        files.extend(root / os.fsdecode(path) for path in result.stdout.split(b"\0") if path)
+    has_head = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", "HEAD"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+    ).returncode == 0
+    diff_target = ["--cached"] if staged or not has_head else ["HEAD"]
+    command = ["git", "diff", *diff_target, "--name-only", "--diff-filter=ACMR", "-z"]
+    result = subprocess.run(command, cwd=root, check=True, capture_output=True)
+    files = [root / os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
 
     if not staged:
         untracked = subprocess.run(
