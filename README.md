@@ -230,6 +230,34 @@ Override thresholds:
 python3 .agent-tools/loc_guard.py . --warn 400 --fail 600
 ```
 
+These CLI flags replace only the global thresholds. They do not change configured per-pattern overrides.
+
+LOC Guard ships with defaults for conventional handwritten source, template, style, shell, and database files across common cross-language stacks. `includeExtensions` replaces that configured set, while repeated `--include` arguments add project-specific extensions.
+
+Use threshold overrides when a well-defined file class needs different limits without receiving a complete exemption:
+
+```json
+{
+  "warnAt": 400,
+  "failAt": 600,
+  "overrides": [
+    {
+      "match": [
+        "**/*Tests.cs",
+        "**/*Test.kt",
+        "**/*.spec.ts"
+      ],
+      "warnAt": 600,
+      "failAt": 900
+    }
+  ]
+}
+```
+
+Normal source uses `400`/`600`; matching tests use the complete `600`/`900` pair. Every override requires a non-empty `match` array plus positive integer `warnAt` and `failAt` values with `warnAt < failAt`. Patterns use the same repository-relative matching as exclusions and exemptions. If multiple overrides match, the last matching entry wins; thresholds are never merged.
+
+Each JSON file result always includes its effective `warnAt`, `failAt`, and `overrideIndex` (`null` when no override matched). Human-readable `WARN`, `FAIL`, and `EXEMPT` entries identify a matched override when one changed the effective thresholds.
+
 ## Exit codes
 
 Normal CLI:
@@ -249,11 +277,13 @@ By default, counted LOC means non-blank physical lines.
 
 Comments are counted by default because large comment-heavy files can still become hard to review. You may set `countCommentLines` to `false` in the config for a lighter check.
 
+Comment suppression recognizes only simple comment-only line prefixes, not multiline comments or full language syntax. For mixed-language Vue files it conservatively recognizes HTML comment lines beginning with `<!--`; it does not infer whether embedded lines are inside template, script, or style blocks.
+
 Generated, vendored, designer, minified, migration, lock, snapshot, and machine-produced files should normally be excluded by configuration.
 
 Each `allowedLargeFiles` entry must be an object with a non-empty string `path` and `reason`. Valid oversized exemptions remain visible as `exempt` with the configured reason. Malformed entries are configuration errors (exit `3`), including under `--ci` and in machine-readable `--json` mode.
 
-Exemptions represent explicit user-approved policy, not an escape hatch for an agent responding to a warning or failure. Likewise, agents must not compress readable source onto fewer physical lines to evade a threshold; legitimate LOC reduction comes from clearer code or better responsibility boundaries.
+Exemptions and threshold overrides represent project policy, not escape hatches for an agent responding to a warning or failure. Agents must not create, broaden, or relax overrides merely to bypass a finding without explicit user approval or existing project policy. Likewise, agents must not compress readable source onto fewer physical lines to evade a threshold; legitimate LOC reduction comes from clearer code or better responsibility boundaries.
 
 ## Agent skill
 

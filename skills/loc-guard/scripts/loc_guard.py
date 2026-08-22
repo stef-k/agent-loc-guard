@@ -29,9 +29,13 @@ DEFAULT_FAIL_AT = 600
 DEFAULT_INCLUDE_EXTENSIONS = {
     ".cs", ".cshtml", ".razor",
     ".js", ".jsx", ".ts", ".tsx",
-    ".py", ".java", ".go", ".rs",
+    ".py", ".java", ".kt", ".kts", ".scala",
+    ".go", ".rs", ".swift", ".dart", ".zig",
     ".cpp", ".c", ".h", ".hpp",
-    ".css", ".scss", ".html",
+    ".m", ".mm", ".fs", ".fsx", ".vb",
+    ".css", ".scss", ".html", ".vue",
+    ".php", ".rb", ".ex", ".exs",
+    ".erl", ".hrl", ".clj", ".cljs", ".cljc", ".lua",
     ".sql", ".sh", ".ps1",
 }
 DEFAULT_EXCLUDES = [
@@ -69,15 +73,37 @@ SINGLE_LINE_COMMENT_PREFIXES = {
     ".tsx": ["//"],
     ".py": ["#"],
     ".java": ["//"],
+    ".kt": ["//"],
+    ".kts": ["//"],
+    ".scala": ["//"],
     ".go": ["//"],
     ".rs": ["//"],
+    ".swift": ["//"],
+    ".dart": ["//"],
+    ".zig": ["//"],
     ".cpp": ["//"],
     ".c": ["//"],
     ".h": ["//"],
     ".hpp": ["//"],
+    ".m": ["//"],
+    ".mm": ["//"],
+    ".fs": ["//"],
+    ".fsx": ["//"],
+    ".vb": ["'"],
     ".css": ["/*"],
     ".scss": ["//", "/*"],
     ".html": ["<!--"],
+    ".vue": ["<!--"],
+    ".php": ["//", "#"],
+    ".rb": ["#"],
+    ".ex": ["#"],
+    ".exs": ["#"],
+    ".erl": ["%"],
+    ".hrl": ["%"],
+    ".clj": [";"],
+    ".cljs": [";"],
+    ".cljc": [";"],
+    ".lua": ["--"],
     ".sql": ["--"],
     ".sh": ["#"],
     ".ps1": ["#"],
@@ -91,6 +117,13 @@ class AllowedLargeFile:
 
 
 @dataclass(frozen=True)
+class ThresholdOverride:
+    match: list[str]
+    warn_at: int
+    fail_at: int
+
+
+@dataclass(frozen=True)
 class Config:
     warn_at: int
     fail_at: int
@@ -99,6 +132,7 @@ class Config:
     include_extensions: set[str]
     exclude: list[str]
     allowed_large_files: list[AllowedLargeFile]
+    overrides: list[ThresholdOverride]
 
 
 @dataclass(frozen=True)
@@ -107,6 +141,9 @@ class FileResult:
     counted_loc: int
     status: str
     reason: str | None = None
+    warn_at: int = DEFAULT_WARN_AT
+    fail_at: int = DEFAULT_FAIL_AT
+    override_index: int | None = None
 
 
 def main() -> int:
@@ -172,6 +209,7 @@ def load_config(args: argparse.Namespace) -> Config:
     exclude.extend(args.exclude)
 
     allowed = parse_allowed_large_files(data.get("allowedLargeFiles", []))
+    overrides = parse_overrides(data.get("overrides", []))
 
     count_blank_lines = bool(data.get("countBlankLines", False)) or bool(args.count_blank_lines)
     count_comment_lines = bool(data.get("countCommentLines", True))
@@ -186,6 +224,7 @@ def load_config(args: argparse.Namespace) -> Config:
         include_extensions=include_extensions,
         exclude=exclude,
         allowed_large_files=allowed,
+        overrides=overrides,
     )
 
 
@@ -210,6 +249,44 @@ def parse_allowed_large_files(value: Any) -> list[AllowedLargeFile]:
         allowed.append(AllowedLargeFile(path=path.replace("\\", "/"), reason=reason))
 
     return allowed
+
+
+def parse_overrides(value: Any) -> list[ThresholdOverride]:
+    if not isinstance(value, list):
+        raise ValueError("overrides must be an array")
+
+    overrides: list[ThresholdOverride] = []
+    for index, item in enumerate(value):
+        location = f"overrides[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{location} must be an object")
+
+        patterns = item.get("match")
+        if (
+            not isinstance(patterns, list)
+            or not patterns
+            or any(not isinstance(pattern, str) or not pattern.strip() for pattern in patterns)
+        ):
+            raise ValueError(f"{location}.match must be a non-empty array of non-empty strings")
+
+        warn_at = parse_positive_integer(item.get("warnAt"), f"{location}.warnAt")
+        fail_at = parse_positive_integer(item.get("failAt"), f"{location}.failAt")
+        if warn_at >= fail_at:
+            raise ValueError(f"{location}.warnAt must be lower than {location}.failAt")
+
+        overrides.append(ThresholdOverride(
+            match=[pattern.replace("\\", "/") for pattern in patterns],
+            warn_at=warn_at,
+            fail_at=fail_at,
+        ))
+
+    return overrides
+
+
+def parse_positive_integer(value: Any, location: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{location} must be a positive integer")
+    return value
 
 
 def normalise_extension(value: str) -> str:
@@ -334,6 +411,8 @@ def should_include(path: Path, config: Config, root: Path) -> bool:
 def matches_path_glob(path: str, pattern: str) -> bool:
     normalised_path = path.replace("\\", "/").removeprefix("./")
     normalised_pattern = pattern.replace("\\", "/").removeprefix("./")
+    if normalised_path == normalised_pattern:
+        return True
     candidates = [normalised_pattern]
 
     while normalised_pattern.startswith("**/"):
@@ -350,21 +429,22 @@ def evaluate_files(files: list[Path], config: Config, root: Path) -> list[FileRe
         rel = relative_path(path, root)
         counted = count_loc(path, config)
         allowed = find_allowed_large_file(rel, config)
+        warn_at, fail_at, override_index = effective_thresholds(rel, config)
 
-        if allowed and counted > config.warn_at:
+        if allowed and counted > warn_at:
             status = "exempt"
             reason = allowed.reason
-        elif counted > config.fail_at:
+        elif counted > fail_at:
             status = "fail"
             reason = None
-        elif counted > config.warn_at:
+        elif counted > warn_at:
             status = "warn"
             reason = None
         else:
             status = "ok"
             reason = None
 
-        results.append(FileResult(rel, counted, status, reason))
+        results.append(FileResult(rel, counted, status, reason, warn_at, fail_at, override_index))
 
     return results
 
@@ -381,7 +461,7 @@ def count_loc(path: Path, config: Config) -> int:
             if not config.count_blank_lines and not stripped:
                 continue
 
-            if not config.count_comment_lines and is_simple_comment_line(stripped, prefixes):
+            if not config.count_comment_lines and is_simple_comment_line(stripped, prefixes, path.suffix):
                 continue
 
             count += 1
@@ -389,18 +469,32 @@ def count_loc(path: Path, config: Config) -> int:
     return count
 
 
-def is_simple_comment_line(stripped: str, prefixes: list[str]) -> bool:
+def is_simple_comment_line(stripped: str, prefixes: list[str], extension: str) -> bool:
     if not stripped:
+        return False
+    if extension == ".php" and stripped.startswith("#["):
         return False
     return any(stripped.startswith(prefix) for prefix in prefixes)
 
 
 def find_allowed_large_file(rel: str, config: Config) -> AllowedLargeFile | None:
     for item in config.allowed_large_files:
-        pattern = item.path.replace("\\", "/")
-        if rel == pattern or fnmatch.fnmatch(rel, pattern):
+        if matches_path_glob(rel, item.path):
             return item
     return None
+
+
+def effective_thresholds(rel: str, config: Config) -> tuple[int, int, int | None]:
+    selected: tuple[int, ThresholdOverride] | None = None
+    for index, override in enumerate(config.overrides):
+        if any(matches_path_glob(rel, pattern) for pattern in override.match):
+            selected = (index, override)
+
+    if selected is None:
+        return config.warn_at, config.fail_at, None
+
+    index, override = selected
+    return override.warn_at, override.fail_at, index
 
 
 def print_json(results: list[FileResult], config: Config) -> None:
@@ -414,6 +508,9 @@ def print_json(results: list[FileResult], config: Config) -> None:
                 "countedLoc": result.counted_loc,
                 "status": result.status,
                 "reason": result.reason,
+                "warnAt": result.warn_at,
+                "failAt": result.fail_at,
+                "overrideIndex": result.override_index,
             }
             for result in results
         ],
@@ -442,6 +539,11 @@ def print_text(results: list[FileResult], config: Config) -> None:
             print(f"  Counted LOC: {result.counted_loc}")
             if result.reason:
                 print(f"  Reason: {result.reason}")
+            if result.override_index is not None:
+                print(
+                    f"  Effective thresholds: warn {result.warn_at}, fail {result.fail_at} "
+                    f"(override {result.override_index})"
+                )
 
             if status == "warn":
                 print("  Required agent action:")

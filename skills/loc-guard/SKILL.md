@@ -98,6 +98,8 @@ A file over 600 counted LOC is a prohibited default state for normal handwritten
 
 Existing approved `allowedLargeFiles` entries may be honored and reported with their configured reasons. Do not add, broaden, modify, or repurpose an exemption, or invent its reason, to bypass a warning or hard failure without explicit user approval.
 
+Threshold overrides are also project policy. Do not create, broaden, or relax an override merely to bypass a warning or failure without explicit user approval or existing project policy.
+
 Do not infer approval from a hard failure, inconvenient refactoring, a nearby or broad exemption, historical file size, time pressure, or a request to complete the coding task. An unapproved file over the hard cap must be resolved or explicitly approved by the user.
 
 Generated, vendored, minified, designer, lock, snapshot, migration, and machine-produced files may be excluded by configuration.
