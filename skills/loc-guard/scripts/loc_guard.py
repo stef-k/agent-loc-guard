@@ -237,22 +237,25 @@ def collect_files(args: argparse.Namespace, config: Config, root: Path) -> list[
 
 
 def git_files(root: Path, staged: bool) -> list[Path]:
-    command = ["git", "diff", "--name-only", "--diff-filter=ACMR"]
-    if staged:
-        command.insert(2, "--cached")
-
-    result = subprocess.run(command, cwd=root, check=True, text=True, capture_output=True)
-    files = [root / line.strip() for line in result.stdout.splitlines() if line.strip()]
+    has_head = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", "HEAD"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+    ).returncode == 0
+    diff_target = ["--cached"] if staged or not has_head else ["HEAD"]
+    command = ["git", "diff", *diff_target, "--name-only", "--diff-filter=ACMR", "-z"]
+    result = subprocess.run(command, cwd=root, check=True, capture_output=True)
+    files = [root / os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
 
     if not staged:
         untracked = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard"],
+            ["git", "ls-files", "--others", "--exclude-standard", "-z"],
             cwd=root,
             check=True,
-            text=True,
             capture_output=True,
         )
-        files.extend(root / line.strip() for line in untracked.stdout.splitlines() if line.strip())
+        files.extend(root / os.fsdecode(path) for path in untracked.stdout.split(b"\0") if path)
 
     return files
 
@@ -277,14 +280,23 @@ def should_include(path: Path, config: Config, root: Path) -> bool:
         return False
 
     rel = relative_path(path, root)
-    rel_with_prefix = f"./{rel}"
-
     for pattern in config.exclude:
-        normalised = pattern.replace("\\", "/")
-        if fnmatch.fnmatch(rel, normalised) or fnmatch.fnmatch(rel_with_prefix, normalised):
+        if matches_path_glob(rel, pattern):
             return False
 
     return True
+
+
+def matches_path_glob(path: str, pattern: str) -> bool:
+    normalised_path = path.replace("\\", "/").removeprefix("./")
+    normalised_pattern = pattern.replace("\\", "/").removeprefix("./")
+    candidates = [normalised_pattern]
+
+    while normalised_pattern.startswith("**/"):
+        normalised_pattern = normalised_pattern[3:]
+        candidates.append(normalised_pattern)
+
+    return any(fnmatch.fnmatch(normalised_path, candidate) for candidate in candidates)
 
 
 def evaluate_files(files: list[Path], config: Config, root: Path) -> list[FileResult]:
