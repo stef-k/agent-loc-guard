@@ -232,6 +232,78 @@ class LocGuardTests(unittest.TestCase):
             self.assertEqual(payload["files"][0]["status"], "exempt")
             self.assertEqual(payload["files"][0]["reason"], "Intentional linear fixture.")
 
+            text_result = self.run_guard(root, ".", "--config", str(config))
+
+            self.assertEqual(text_result.returncode, 0, text_result.stderr)
+            self.assertIn("EXEMPT:", text_result.stdout)
+            self.assertIn("Reason: Intentional linear fixture.", text_result.stdout)
+
+    def test_malformed_allowed_large_files_are_configuration_errors(self) -> None:
+        invalid_entries = [
+            ({"reason": "Missing path."}, "allowedLargeFiles[0].path"),
+            ({"path": "", "reason": "Empty path."}, "allowedLargeFiles[0].path"),
+            ({"path": "   ", "reason": "Blank path."}, "allowedLargeFiles[0].path"),
+            ({"path": 123, "reason": "Non-string path."}, "allowedLargeFiles[0].path"),
+            ({"path": "large.py"}, "allowedLargeFiles[0].reason"),
+            ({"path": "large.py", "reason": ""}, "allowedLargeFiles[0].reason"),
+            ({"path": "large.py", "reason": "   "}, "allowedLargeFiles[0].reason"),
+            ({"path": "large.py", "reason": 123}, "allowedLargeFiles[0].reason"),
+            (None, "allowedLargeFiles[0] must be an object"),
+            ("large.py", "allowedLargeFiles[0] must be an object"),
+            ({}, "allowedLargeFiles[0].path"),
+        ]
+
+        for entry, expected_error in invalid_entries:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                config = root / "loc-guard.config.json"
+                config.write_text(json.dumps({"allowedLargeFiles": [entry]}), encoding="utf-8")
+
+                result = self.run_guard(root, ".", "--config", str(config))
+
+                self.assertEqual(result.returncode, 3)
+                self.assertIn(expected_error, result.stderr)
+
+    def test_allowed_large_files_must_be_an_array(self) -> None:
+        for value in (None, {}, "large.py"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                config = root / "loc-guard.config.json"
+                config.write_text(json.dumps({"allowedLargeFiles": value}), encoding="utf-8")
+
+                result = self.run_guard(root, ".", "--config", str(config))
+
+                self.assertEqual(result.returncode, 3)
+                self.assertIn("allowedLargeFiles must be an array", result.stderr)
+
+    def test_malformed_allowed_large_file_emits_json_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config = root / "loc-guard.config.json"
+            config.write_text(
+                json.dumps({"allowedLargeFiles": [{"path": "large.py", "reason": "   "}]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_guard(root, ".", "--config", str(config), "--json")
+
+            self.assertEqual(result.returncode, 3)
+            self.assertEqual(
+                self.read_json(result)["error"],
+                "allowedLargeFiles[0].reason must be a non-empty string",
+            )
+
+    def test_ci_does_not_suppress_malformed_allowed_large_file_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config = root / "loc-guard.config.json"
+            config.write_text(json.dumps({"allowedLargeFiles": [None]}), encoding="utf-8")
+
+            result = self.run_guard(root, ".", "--config", str(config), "--ci")
+
+            self.assertEqual(result.returncode, 3)
+            self.assertIn("allowedLargeFiles[0] must be an object", result.stderr)
+
     def test_changed_only_includes_untracked_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
