@@ -446,6 +446,16 @@ class LocGuardTests(unittest.TestCase):
             self.assertEqual(result.returncode, 3)
             self.assertIn("missing-ref", self.read_json(result)["error"])
 
+    def test_empty_base_ref_returns_tool_error_without_full_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            init_git_repo(root, {"legacy.py": 7})
+
+            result = self.run_guard(root, ".", "--base-ref", " ", "--ci", "--json")
+
+            self.assertEqual(result.returncode, 3)
+            self.assertEqual(self.read_json(result)["error"], "--base-ref must not be empty")
+
     def test_base_ref_conflicts_with_worktree_selection_modes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

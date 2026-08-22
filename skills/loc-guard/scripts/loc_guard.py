@@ -218,11 +218,14 @@ def find_repo_root(start: Path) -> Path:
 
 
 def collect_files(args: argparse.Namespace, config: Config, root: Path) -> list[Path]:
-    selection_modes = sum(bool(mode) for mode in (args.changed_only, args.staged, args.base_ref))
+    has_base_ref = args.base_ref is not None
+    selection_modes = sum((args.changed_only, args.staged, has_base_ref))
     if selection_modes > 1:
         raise ValueError("use only one file-selection mode: --changed-only, --staged, or --base-ref")
+    if has_base_ref and not args.base_ref.strip():
+        raise ValueError("--base-ref must not be empty")
 
-    if args.base_ref:
+    if has_base_ref:
         files = git_base_files(root, args.base_ref)
     elif args.changed_only or args.staged:
         files = git_files(root, staged=args.staged)
