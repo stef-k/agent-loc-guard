@@ -244,7 +244,7 @@ def git_files(root: Path, staged: bool) -> list[Path]:
     files: list[Path] = []
     for command in diff_commands:
         result = subprocess.run(command, cwd=root, check=True, capture_output=True)
-        files.extend(root / path.decode() for path in result.stdout.split(b"\0") if path)
+        files.extend(root / os.fsdecode(path) for path in result.stdout.split(b"\0") if path)
 
     if not staged:
         untracked = subprocess.run(
@@ -253,7 +253,7 @@ def git_files(root: Path, staged: bool) -> list[Path]:
             check=True,
             capture_output=True,
         )
-        files.extend(root / path.decode() for path in untracked.stdout.split(b"\0") if path)
+        files.extend(root / os.fsdecode(path) for path in untracked.stdout.split(b"\0") if path)
 
     return files
 
