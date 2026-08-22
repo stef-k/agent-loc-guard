@@ -411,6 +411,8 @@ def should_include(path: Path, config: Config, root: Path) -> bool:
 def matches_path_glob(path: str, pattern: str) -> bool:
     normalised_path = path.replace("\\", "/").removeprefix("./")
     normalised_pattern = pattern.replace("\\", "/").removeprefix("./")
+    if normalised_path == normalised_pattern:
+        return True
     candidates = [normalised_pattern]
 
     while normalised_pattern.startswith("**/"):
@@ -459,7 +461,7 @@ def count_loc(path: Path, config: Config) -> int:
             if not config.count_blank_lines and not stripped:
                 continue
 
-            if not config.count_comment_lines and is_simple_comment_line(stripped, prefixes):
+            if not config.count_comment_lines and is_simple_comment_line(stripped, prefixes, path.suffix):
                 continue
 
             count += 1
@@ -467,8 +469,10 @@ def count_loc(path: Path, config: Config) -> int:
     return count
 
 
-def is_simple_comment_line(stripped: str, prefixes: list[str]) -> bool:
+def is_simple_comment_line(stripped: str, prefixes: list[str], extension: str) -> bool:
     if not stripped:
+        return False
+    if extension == ".php" and stripped.startswith("#["):
         return False
     return any(stripped.startswith(prefix) for prefix in prefixes)
 

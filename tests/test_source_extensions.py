@@ -42,6 +42,18 @@ class SourceExtensionTests(LocGuardTestCase):
                 {"Main.kt": 1, "script.rb": 1},
             )
 
+    def test_php_attribute_is_source_while_hash_comment_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "Controller.php").write_text("# comment\n#[Route('/')]\nclass Controller {}\n", encoding="utf-8")
+
+            result = self.run_guard(
+                root, ".", "--warn", "2", "--fail", "4", "--ignore-comment-lines", "--json"
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(self.read_json(result)["files"][0]["countedLoc"], 2)
+
     def test_include_still_adds_a_non_default_extension_with_or_without_dot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -66,6 +66,39 @@ class ThresholdOverrideTests(LocGuardTestCase):
                 self.assertEqual(item["overrideIndex"], 1)
                 self.assertEqual((item["warnAt"], item["failAt"]), (9, 12))
 
+    def test_leading_globstar_override_matches_root_and_nested_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_lines(root / "RootTest.kt", 7)
+            write_lines(root / "src" / "NestedTest.kt", 7)
+            config = write_config(root, {
+                "warnAt": 3,
+                "failAt": 6,
+                "overrides": [{"match": ["**/*Test.kt"], "warnAt": 6, "failAt": 9}],
+            })
+
+            result = self.run_guard(root, ".", "--config", str(config), "--json")
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            for item in self.read_json(result)["files"]:
+                self.assertEqual(item["status"], "warn")
+                self.assertEqual(item["overrideIndex"], 0)
+
+    def test_literal_exemption_path_with_glob_metacharacters_still_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_lines(root / "file[1].py", 7)
+            config = write_config(root, {
+                "warnAt": 3,
+                "failAt": 6,
+                "allowedLargeFiles": [{"path": "file[1].py", "reason": "Approved literal path."}],
+            })
+
+            result = self.run_guard(root, ".", "--config", str(config), "--json")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(self.read_json(result)["files"][0]["status"], "exempt")
+
     def test_cli_thresholds_only_replace_global_thresholds(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
